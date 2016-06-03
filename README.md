@@ -53,7 +53,7 @@ From the front-end, issue a request to the obtained URL. This redirects your end
 
 In order to use the connector, you need to import the main module: ```fitbit/userClient```, as described below:
 ```
-var userClient = require("fitbit/userClient");
+var userClient = require("/modules/fitbit/userClient");
 ```
 Then create a new instance of the FitbitUser class, defined in this module (we assume that we already otbained an access token for the given user):
 ```
