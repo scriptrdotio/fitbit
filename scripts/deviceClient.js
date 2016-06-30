@@ -4,8 +4,8 @@ write=nobody
 execute=authenticated 
   **/ 
  
- var config = require("./config");
-var fitbitModule = require("./fitbitClient");
+ var config = require("./config.js");
+var fitbitModule = require("./fitbitClient.js");
 
 /**
  * This class exposes methods to manipulate a given fitbit device

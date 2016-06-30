@@ -4,8 +4,8 @@ write=nobody
 execute=authenticated 
   **/ 
  
- var fitbitModule = require("./fitbitClient");
-var config = require("./config");
+ var fitbitModule = require("./fitbitClient.js");
+var config = require("./config.js");
 
 /**
  * This class allows you to invoke user-operations exposed by the fitbit APIs
@@ -321,7 +321,7 @@ FitbitUser.prototype.listDevices = function() {
  */
 FitbitUser.prototype.getDevice = function(deviceId) {
   
-  var deviceModule = require("./deviceClient");
+  var deviceModule = require("./deviceClient.js");
   var dto = {
     "username": this.username,
     "deviceId": deviceId,

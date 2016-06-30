@@ -3,7 +3,7 @@
 write=nobody
 execute=authenticated 
   **/ 
-var userClient = require("../userClient");
+var userClient = require("../userClient.js");
 
 try {
   var user = new userClient.FitbitUser({username:"karim"});

@@ -4,9 +4,9 @@ write=nobody
 execute=authenticated 
   **/ 
  
- var config = require("./config");
+ var config = require("./config.js");
 var http = require("http");
-var tokenMgr = require("./authorization/TokenManager");
+var tokenMgr = require("./authorization/TokenManager.js");
 
 /**
  * A generic http client that handles the communication with the fitbit APIs

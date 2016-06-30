@@ -4,7 +4,7 @@ write=nobody
 execute=authenticated 
   **/ 
  
- var tokenManager = require("./TokenManager");
+ var tokenManager = require("./TokenManager.js");
 
 try {
   
