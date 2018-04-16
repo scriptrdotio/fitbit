@@ -3,8 +3,11 @@
 write=nobody
 execute=authenticated 
   **/ 
- 
- /**
+ const TYPE = "healthapi";
+const SOURCE = "fitbit";
+var useLegacyStorage = false; // set to true if you need to keep backward compatibility with former versions 
+
+/**
  * This module is in charge of obtaining an OAuth 2.0 access token, either from 
  * a provided code or from a provided refresh token, for a given user.
  * The module stores the access and refresh token in the global storage
@@ -13,6 +16,7 @@ execute=authenticated
  * @module TokenManager
  */
 
+var document = require("document");
 var config = require("../config.js");
 var util = require("../util.js");
 var http = require("http");
@@ -25,21 +29,36 @@ var http = require("http");
  * @return {Object} {accessToken, refreshToken}
  */
 function getPersistedTokens(username) {
-  
-  var accessToken = storage.global["fitbit_" + username + "_fibitAccessToken"];
-  var refreshToken = storage.global["fitbit_" + username + "_fitbitRefreshToken"];
-  if (!accessToken || !refreshToken) {
-    
-    throw {
-      "errorCode": "Missing_Access_Token",
-      "errorDetail": "Could not find an access token or a refresh token for this user " + username
+
+    var accessToken = "";
+    var refreshToken = "";    
+    if (useLegacyStorage) {
+
+        accessToken = storage.global["fitbit_" + username + "_fibitAccessToken"];
+        refreshToken = storage.global["fitbit_" + username + "_fitbitRefreshToken"];
+    }else {
+
+        var key = _getDocumentKey(username);    
+        var resp = document.get(key);
+        if (resp.metadata.status == "failure") {        
+
+            log.error("TokenManager.getPersistedTokens:\n" + JSON.stringify(resp));
+            throw resp;
+        }
+    }
+
+    if (!accessToken || !refreshToken) {
+
+        throw {
+            "errorCode": "Missing_Access_Token",
+            "errorDetail": "Could not find an access token or a refresh token for this user " + username
+        };
+    }
+
+    return {
+        "accessToken": accessToken,
+        "refreshToken": refreshToken
     };
-  }
-  
-  return {
-    "accessToken": accessToken,
-    "refreshToken": refreshToken
-  };
 }
 
 /**
@@ -53,24 +72,24 @@ function getPersistedTokens(username) {
  * @return {Object} the API response. You do not need it normally. Get the tokens using getPersistedTokens()
  */
 function getAccessToken(params) {
-  
-  if (!params) {
-    
-    throw {
-      "errorCode": "Invalid_Parameter",
-      "errorDetail": "getAccessToken - params cannot be null or empty"
-    };
-  }
-  
-  var params = {
 
-    "state": params.state,
-    "code": params.code,
-    "grant_type": "authorization_code",
-    "redirect_uri": config.redirect_uri
-  };
-  
-  return this._getToken(params);
+    if (!params) {
+
+        throw {
+            "errorCode": "Invalid_Parameter",
+            "errorDetail": "getAccessToken - params cannot be null or empty"
+        };
+    }
+
+    var params = {
+
+        "state": params.state,
+        "code": params.code,
+        "grant_type": "authorization_code",
+        "redirect_uri": config.redirect_uri
+    };
+
+    return this._getToken(params);
 }
 
 /**
@@ -81,88 +100,123 @@ function getAccessToken(params) {
  * @return {Object} the API response. You do not need it normally. Get the tokens using getPersistedTokens()
  */
 function refreshAccessToken(username) {
- 
-  if (!username) {
-    
-    throw {
-      "errorCode": "Invalid_Parameter",
-      "errorDetail": "You need to pass a username to refresh the token"
+
+    if (!username) {
+
+        throw {
+            "errorCode": "Invalid_Parameter",
+            "errorDetail": "You need to pass a username to refresh the token"
+        };
     };
-  };
-  
-  var refreshToken = getPersistedTokens(username).refreshToken;
-  var refreshParams = {
-    
-    "grant_type": "refresh_token",
-    "refresh_token": refreshToken
-  };
-  
-  return this._getToken(refreshParams, username);
+
+    var refreshToken = getPersistedTokens(username).refreshToken;
+    var refreshParams = {
+
+        "grant_type": "refresh_token",
+        "refresh_token": refreshToken
+    };
+
+    return this._getToken(refreshParams, username);
 }
 
 function _getToken(params, username) {
-  
-  var requestObject = {  
 
-    "url": config.accessTokenUrl,
-    "method": "POST",
-    "params": params,
-    "headers": {
-      "Authorization": "Basic " +  util.Base64.encode(config.client_id + ":" + config.client_secret),
-      "Content-Type": "application/x-www-form-urlencoded"
-    }
-  };
+    var requestObject = {  
 
-  var response = http.request(requestObject);
-  console.log("Received response " +  JSON.stringify(response));
-  var responseBodyStr = response.body;
-  var responseObj = null;
-  if (response.status == "200") {
+        "url": config.accessTokenUrl,
+        "method": "POST",
+        "params": params,
+        "headers": {
+            "Authorization": "Basic " +  btoa(config.client_id + ":" + config.client_secret),
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+    };
 
-    if (response.headers["Content-Type"].indexOf("application/json") > -1) {
-      
-      responseObj = JSON.parse(responseBodyStr);
-      
-      // retrieve the username who owns this token using the persisted state-username mapping
-      var username = username ? username : storage.global["fitbit_state_" + params.state];
-      if (!username) {
-      
-       	throw {
-          
-          "errorCode": "Inconsistency_Error",
-          "errorDetail": "Could not find username " + username + " in store to store the tokens"
-        };
-      }
+    var response = http.request(requestObject);
+    console.log("Received response " +  JSON.stringify(response));
+    var responseBodyStr = response.body;
+    var responseObj = null;
+    if (response.status == "200") {
 
-      // clean-up the state
-      storage.global["fitbit_state_" + params.state] = null;
-      
-      // persist the received access and refresh tokens in the storage and associate them to the targeted user
-      storage.global["fitbit_" + username + "_fibitAccessToken"] = responseObj["access_token"];
-      storage.global["fitbit_" + username + "_fitbitRefreshToken"] = responseObj["refresh_token"];
-      return responseObj;
+        if (response.headers["Content-Type"].indexOf("application/json") > -1) {
+
+            responseObj = JSON.parse(responseBodyStr);
+
+            // retrieve the username who owns this token using the persisted state-username mapping
+            var username = username ? username : storage.global["fitbit_state_" + params.state];
+            if (!username) {
+
+                throw {
+
+                    "errorCode": "Inconsistency_Error",
+                    "errorDetail": "Could not find username " + username + " in store to store the tokens"
+                };
+            }
+
+            // clean-up the state
+            storage.global["fitbit_state_" + params.state] = null;
+            saveTokens(username, responseObj);            
+            return responseObj;
+        }else {
+
+            throw {
+                "errorCode": "Unexpected_Response",
+                "errorDetail": responseBodyStr
+            }
+        }    
     }else {
-      
-      throw {
-        "errorCode": "Unexpected_Response",
-        "errorDetail": responseBodyStr
-      }
+
+        var errorObj = "";
+        try {
+
+            errorObj = JSON.parse(response.body);
+            errorObj = errorObj.errors;
+        }catch(e) {
+            errorObj = JSON.parse(response);
+        };
+
+        throw {
+
+            "errorCode": "Authorization_Failed",
+            "errorDetail": errorObj
+        };
+    }
+}	
+
+function saveTokens(username, dto) {
+
+    if (useLegacyStorage) {
+        
+        // persist the received access and refresh tokens in the storage and associate them to the targeted user
+        storage.global["fitbit_" + username + "_fibitAccessToken"] = dto["access_token"];
+        storage.global["fitbit_" + username + "_fitbitRefreshToken"] = dto["refresh_token"];
+    }else {
+
+        var fields = {
+
+            type: TYPE,
+            key: _getDocumentKey(username),
+            accessToken: dto.access_token,
+            username: username
+        };
+
+        if (dto.refresh_token){
+            fields.refreshToken = dto.refresh_token
+        }
+
+        if (dto.userId) {
+            fields.userId = dto.userId
+        }
+
+        var resp = document.save(fields);
+        if (resp.metadata.status == "failure") {        
+
+            log.error("TokenManager.saveTokens:\n" + JSON.stringify(resp));
+            throw resp;
+        }
     }    
-  }else {
-    
-    var errorObj = "";
-    try {
-      
-      errorObj = JSON.parse(response.body);
-      errorObj = errorObj.errors;
-    }catch(e) {
-      errorObj = JSON.parse(response);
-    };
-    
-    throw {
-      
-      "errorCode": "Authorization_Failed",
-      "errorDetail": errorObj
-    };
-  }
-}			
+}
+
+function _getDocumentKey(username) {
+    return TYPE + "_" + util.toStorableUserName(username) + "_" + SOURCE;
+}
